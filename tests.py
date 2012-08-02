@@ -7,6 +7,7 @@ from bson.objectid import ObjectId
 import random
 from functools import partial
 
+
 class TestDico(unittest.TestCase):
     def setUp(self):
         pass
@@ -853,6 +854,15 @@ class TestDico(unittest.TestCase):
         user = User()
         user.url = ''
         self.assertTrue(user.validate())
+    
+    def test_minified_name(self):
+        class User(dico.Document):
+            account_id = dico.IntegerField(minified_name='aid')
+        
+        user = User()
+        user.account_id = 1
+        self.assertTrue('aid' in user.dict_for_save())
+        self.assertEquals(user.dict_for_save()['aid'], 1)
 
 
 if __name__ == "__main__":

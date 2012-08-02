@@ -1,6 +1,8 @@
 import re
 import datetime
 import socket
+from functools import partial
+
 
 URL_REGEX_COMPILED = re.compile(
     r'^https?://'
@@ -23,6 +25,14 @@ EMAIL_REGEX_COMPILED = re.compile(
 )
 
 
+# Filters
+def rename_field(old_name, new_name, dict_to_filter):
+    if old_name in dict_to_filter:
+        dict_to_filter[new_name] = dict_to_filter[old_name]
+        del dict_to_filter[old_name]
+    return dict_to_filter
+
+
 class ValidationException(Exception):
     """The field did not pass validation.
     """
@@ -30,13 +40,21 @@ class ValidationException(Exception):
 
 
 class BaseField(object):
-    def __init__(self, default=None, required=False, choices=None, aliases=None):
+    def __init__(self, default=None, required=False, choices=None, aliases=None, minified_name=None):
         """ the BaseField class for all Document's field
         """
         self.default = default
         self.is_required = required
         self.choices = choices
         self.aliases = aliases
+        self.minified_name = minified_name
+        if self.minified_name is not None:
+            # add to aliases
+            if not self.aliases:
+                self.aliases = [self.minified_name]
+            else:
+                self.aliases.append(self.minified_name)
+            # we'll add rename_to presave filter after _register_document in metaclass
 
     def _register_document(self, document, field_name):
         self.field_name = field_name
@@ -44,6 +62,12 @@ class BaseField(object):
         if self.aliases is not None:
             for alias in self.aliases:
                 document._aliases.append((alias, field_name))
+        if self.minified_name is not None:
+            filter = partial(rename_field, field_name, self.minified_name)
+            if not hasattr(document, 'pre_save_filter'):
+                document.pre_save_filter = [filter]
+            else:
+                document.pre_save_filter.append(filter)
 
     def _changed(self, instance):
         """ notify parent's document for changes """
@@ -286,6 +310,13 @@ class FloatField(BaseField):
 class DateTimeField(BaseField):
     def _validate(self, value):
         if not isinstance(value, (datetime.datetime)):
+            return False
+        return True
+
+
+class DictionaryField(BaseField):
+    def _validate(self, value):
+        if not isinstance(value, dict):
             return False
         return True
 
@@ -559,11 +590,3 @@ class Document(object):
             raise ValidationException()
 
         return {good_key: getattr(self, good_key) for good_key in self._modified_fields}
-
-
-# Filters
-def rename_field(old_name, new_name, dict_to_filter):
-    if old_name in dict_to_filter:
-        dict_to_filter[new_name] = dict_to_filter[old_name]
-        del dict_to_filter[old_name]
-    return dict_to_filter
